@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kreator"
+version = "0.1.0"
+description = "View and edit Qt Quick / Kirigami and Qt Designer UI files, following the KDE HIG"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+# PySide6 must be built against the same Qt as the system's Kirigami, so use
+# your distribution's package (e.g. python3-pyside6) rather than the wheel.
+dependencies = []
+
+[project.scripts]
+kreator = "kreator.app:main"
+
+[tool.setuptools]
+packages = ["kreator"]
+
+[tool.setuptools.package-data]
+kreator = ["qml/*.qml", "native/kateeditor/*.txt", "native/kateeditor/*.cpp", "native/kateeditor/*.h",
+           "native/kateeditor/demo/*"]

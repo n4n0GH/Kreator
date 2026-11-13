@@ -1,0 +1,19 @@
+import QtQuick.tooling 1.2
+
+Module {
+    Component {
+        file: "store.h"
+        name: "Store"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["org.example.notes/Store 1.0"]
+        isCreatable: false
+        isSingleton: true
+        exportMetaObjectRevisions: [256]
+        Property { name: "title"; type: "QString"; read: "title"; notify: "titleChanged"; index: 0 }
+        Property { name: "notes"; type: "QStringList"; read: "notes"; notify: "notesChanged"; index: 1 }
+        Signal { name: "titleChanged" }
+        Signal { name: "notesChanged" }
+        Method { name: "undo"; Parameter { name: "token"; type: "int" } }
+    }
+}

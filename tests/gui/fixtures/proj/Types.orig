@@ -1,0 +1,13 @@
+import QtQuick
+import org.kde.kirigami as Kirigami
+
+Item {
+    Rectangle {
+        color: "red"
+    }
+    Kirigami.Icon {
+        source: "go-next"
+    }
+    MyButton {
+    }
+}

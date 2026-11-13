@@ -1,0 +1,5 @@
+module org.example.notes
+depends QtQuick
+prefer :/qt/qml/org/example/notes/
+Main 1.0 Main.qml
+NoteList 1.0 NoteList.qml

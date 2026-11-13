@@ -1,0 +1,6 @@
+__pycache__/
+*.egg-info/
+build/
+kreator/native/build/
+kreator/native/kateeditor/compile_commands.json
+dist/

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kreator
+GenericName=User Interface Designer
+Comment=View and edit Qt Quick, Kirigami and Qt Designer user interface files
+Exec=kreator %f
+Icon=document-preview
+Terminal=false
+Categories=Qt;KDE;Development;GUIDesigner;
+MimeType=text/x-qml;application/x-designer;
+Keywords=qml;kirigami;designer;ui;glade;
