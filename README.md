@@ -44,6 +44,11 @@ settings (`~/.config/qviewer/qviewer.conf`) and saved session.
     `property int count` (or `required property string title`) as the name
     declares the property.
 - **Component palette** (the *Add* tab):
+  - **Previews:** point at a component (or go through the list with the
+    arrow keys) to see it beside the sidebar before you add it: the live
+    component in your style and colours, as in Kirigami Gallery. Layouts and
+    other empty containers are shown with example contents, pages in a
+    window, dialogs open; Qt Widgets as pictures.
   - **Contents:** Kirigami pages, cards, messages and forms, Qt Quick Controls
     and layouts, data and logic (`ListModel`, `ListElement`,
     `KSortFilterProxyModel`, `Connections`, `Settings`), or Qt Widgets.

@@ -83,6 +83,7 @@ Kirigami.Page {
         category: "window"
         property bool projectPanelShown: true   // the sidebar (F9)
         property int sidebarTab: 0
+        property bool componentPreviews: true   // the Add tab shows what a component looks like
     }
 
     actions: [
@@ -388,6 +389,8 @@ Kirigami.Page {
             sourceMode: page.sourceMode
             currentTab: uiSettings.sidebarTab
             onCurrentTabChanged: uiSettings.sidebarTab = currentTab
+            componentPreviews: uiSettings.componentPreviews
+            onComponentPreviewsChanged: uiSettings.componentPreviews = componentPreviews
             QQC2.SplitView.preferredWidth: Kirigami.Units.gridUnit * 16
             QQC2.SplitView.minimumWidth: Kirigami.Units.gridUnit * 11
         }

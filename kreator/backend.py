@@ -17,7 +17,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
-from . import documents, editors, katestyle, preview, project, qmldoc, session, signalflow, typeinfo, uidoc
+from . import documents, editors, katestyle, palette, preview, project, qmldoc, session, signalflow, typeinfo, uidoc
 from .runner import Runner
 from .models import RowsModel
 
@@ -98,6 +98,11 @@ class Backend(QObject):
         self.qml_preview = preview.QmlPreview(engine, preloader)
         self.popup_confiner = preview.PopupConfiner(lambda: [self._preview_obj, *self._graveyard], self)
         self.ui_preview = preview.UiPreview(ui_provider)
+        # what the Add tab shows of a component before it is added
+        self._palette_images = preview.PaletteImageProvider()
+        engine.addImageProvider("kreatorpalette", self._palette_images)
+        self._palette_item = None
+        self._palette_serial = 0
         self.settings = QSettings("kreator", "kreator")
 
         self.adapter = None
@@ -159,7 +164,8 @@ class Backend(QObject):
                                    "hasChildren", "expanded", "issueCount"], "uid", self)
         self._props = RowsModel(["name", "kind", "value", "isSet", "section", "liveValue", "enumKeys",
                                  "typeName", "raw"], "name", self)
-        self._palette = RowsModel(["name", "category", "iconName", "description", "index"], "index", self)
+        self._palette = RowsModel(["name", "category", "iconName", "description", "index", "module"],
+                                  "index", self)
         self._issues = RowsModel(["index", "uid", "severity", "title", "detail", "property", "fixable",
                                   "nodeLabel"], "index", self)
 
@@ -1350,7 +1356,8 @@ class Backend(QObject):
             if f and f not in e["name"].lower() and f not in e["desc"].lower() and f not in e["cat"].lower():
                 continue
             rows.append({"name": e["name"], "category": e["cat"], "iconName": e["icon"],
-                         "description": e["desc"], "index": i})
+                         "description": e["desc"], "index": i,
+                         "module": e["module"][0] if "module" in e else "Qt Widgets"})
         self._palette.set_rows(rows)
 
     def _refresh_issues(self):
@@ -1463,6 +1470,7 @@ class Backend(QObject):
             self.engine.warnings.disconnect(self._on_qml_warnings)
         except (RuntimeError, TypeError):
             pass
+        self.clearComponentPreview()
         objs = [self._preview_obj, *self._graveyard]
         self._preview_obj = None
         self._graveyard = []
@@ -1710,6 +1718,55 @@ class Backend(QObject):
     def setPaletteFilter(self, text):  # noqa: N802
         self.palette_filter = text
         self._refresh_palette()
+
+    @Slot(int, QQuickItem, result="QVariantMap")
+    def componentPreview(self, index, stage):  # noqa: N802
+        """What palette entry `index` looks like, for the Add tab to show
+        before the component is added:
+          {kind: "item", item}    the live component, made as a child of `stage`
+          {kind: "image", source, width, height}    a picture of the widget
+          {kind: "none"}          it draws nothing
+        each with a `note` to show below ("" for none). The item lives until
+        the next call, or clearComponentPreview()."""
+        self.clearComponentPreview()
+        if self.adapter is None or not 0 <= index < len(self.adapter.palette()):
+            return {"kind": "none", "note": ""}
+        entry = self.adapter.palette()[index]
+        out = {"kind": "none", "note": palette.preview_note(entry)}
+        if self.adapter.kind != "qml":
+            try:
+                drawn = self.ui_preview.demo_image(entry)
+            except Exception:  # noqa: BLE001 - only a preview
+                drawn = None
+            if drawn is None:
+                out["note"] = out["note"] or "Draws nothing itself: it holds other widgets"
+                return out
+            self._palette_images.image, width, height = drawn
+            self._palette_serial += 1
+            out.update(kind="image", source=f"image://kreatorpalette/{self._palette_serial}",
+                       width=width, height=height)
+            return out
+        text = palette.preview_qml(entry)
+        if not text or stage is None:
+            return out
+        try:
+            item = self.qml_preview.demo_item(entry["name"], text, stage)
+        except Exception:  # noqa: BLE001 - only a preview
+            item = None
+        if item is None:
+            out["note"] = "No preview: the component could not be created here"
+            return out
+        self._palette_item = self._track(item)
+        out.update(kind="item", item=item)
+        return out
+
+    @Slot()
+    def clearComponentPreview(self):  # noqa: N802
+        item, self._palette_item = self._palette_item, None
+        if item is not None and self._alive(item):
+            item.setVisible(False)
+            item.setParentItem(None)
+            item.deleteLater()
 
     @Slot(int)
     def insertComponent(self, index):  # noqa: N802
@@ -2030,12 +2087,9 @@ class Backend(QObject):
         key = (index, cw, ch)
         cache = self.__dict__.setdefault("_component_sizes", {})
         if key not in cache:
-            snippet = (entry["qml"].replace("{T}", "qsTr").replace("{K}", "Kirigami.").replace("{C}", "QQC2.")
-                       .replace("{L}", "").replace("{M}", ""))
-            imports = ("import QtQuick\nimport QtQuick.Controls as QQC2\nimport QtQuick.Layouts\n"
-                       "import org.kde.kirigami as Kirigami\n")
             try:
-                cache[key] = list(self.qml_preview.component_size(snippet, imports, cw, ch))
+                cache[key] = list(self.qml_preview.component_size(palette.standalone(entry["qml"]),
+                                                                  palette.STANDALONE_IMPORTS, cw, ch))
             except Exception:  # noqa: BLE001 - only a preview of the size
                 cache[key] = [0, 0]
             # anchored to its parent (its position isn't the drop point), or

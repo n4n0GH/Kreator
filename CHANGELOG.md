@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Component previews in the Add tab:** pointing at a component, or going
+  through the list with the arrow keys, shows it beside the sidebar before
+  it is added: the live component with its full description, as in Kirigami
+  Gallery. Empty containers are shown with example contents, pages in a
+  window, dialogs open; a form's widgets as pictures. *Show Previews* beside
+  the search field switches them off.
+- The Add tab's list can be used with the keyboard: Down from the search
+  field, the arrow keys, Enter or Space to add.
+
 ## 0.1.0
 
 The first release.

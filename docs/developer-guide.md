@@ -357,6 +357,7 @@ the global shortcuts.
 | File | What it is |
 |---|---|
 | `SidePanel.qml` | the sidebar's tabs: Files (`ProjectPanel`), Outline / Symbols (`SymbolsView`), Add, Guidelines (`IssuesPanel` + `ProjectLintView`) |
+| `ComponentPreview.qml` | what a component of the Add tab looks like, shown beside the sidebar |
 | `DocumentTabs.qml` | the tab bar |
 | `PreviewPane.qml` | the design view: preview, selection overlay, design grid, preview toolbar |
 | `PropertyPanel.qml`, `PropertyRow.qml` | the properties panel and its per-type editors |
@@ -376,6 +377,38 @@ the global shortcuts.
 `Backend.kateEditorAvailable` is true, because that file imports the native
 module. Both source panes have the same interface: `active`, `load()`,
 `commitPending()`, `pendingText()`, `gotoPosition()` and `currentLine`.
+
+#### The Add tab's previews
+
+`ComponentPreview.qml` is an item in the window's overlay, placed beside the
+sidebar and level with the row it is shown for. `SidePanel.qml` tells it the
+row: the one the pointer is on, or the list's current one when the arrow
+keys came last. It asks `Backend.componentPreview(index, stage)` what to
+show:
+
+- **QML:** `palette.preview_qml(entry)` wraps the entry's snippet (or its
+  `demo`) in a stage item, and `QmlPreview.demo_item()` creates it as a
+  child of the preview's stage, in a context of its own like the design
+  view's previews (so `Backend` isn't visible to it). The components are the
+  real ones, in Kreator's own style and colours. The compiled demos are kept;
+  the item lives until the next preview or `clearComponentPreview()`.
+- **Forms:** `UiPreview.demo_image()` builds the widget with example
+  contents and grabs it; the picture is served as `image://kreatorpalette/…`.
+- **Nothing to draw:** the preview shows the entry's icon and a note.
+
+What keeps a preview from getting in the user's way:
+
+- The stage is a `FocusScope` that never has the focus, and a dialog's demo
+  sets `focus: false`: typing in the search field goes on. A `MouseArea`
+  over the stage takes what the pointer does.
+- A dialog is opened with `popupType: Popup.Item`, not modal, with the stage
+  as its parent, so Qt draws it over the stage (in the window's overlay,
+  like the preview) and it blocks nothing.
+- Demo files are named `.kreator-palette-<name>.qml`, not
+  `.kreator-preview-…`: their warnings aren't reported as the document's.
+- Drawers can't be shown: Qt attaches them to the window's edge. The
+  `GlobalDrawer` entry is a sketch made of delegates, and says so in its
+  note.
 
 The UI follows the KDE HIG, like what Kreator checks: Kirigami units for
 spacing, title case for actions and buttons, sentence case for labels,
@@ -689,7 +722,7 @@ python3 tests/test_qml_roundtrip.py      # every QML file on the system
 
 | File | Covers |
 |---|---|
-| `tests/test_core.py` | parsing, serialising, editing both formats, palette insertion (also into slots), declared properties, list models, new projects, Run's output, lint and fixes, sessions, external editors |
+| `tests/test_core.py` | parsing, serialising, editing both formats, palette insertion (also into slots) and previews, declared properties, list models, new projects, Run's output, lint and fixes, sessions, external editors |
 | `tests/test_signalflow.py` | the signal flow analysis, layout, crossing reduction and member removal |
 | `tests/test_qml_roundtrip.py` | the QML parser against all QML files installed on the system |
 
@@ -824,7 +857,31 @@ Add a `dict(...)` to `QML_COMPONENTS` (or a `_w(...)` to `UI_COMPONENTS`) in
   window instead of going on its page.
 - `id=False` is for objects that can't have an id (`ListElement`).
 
-`BuildingTests.test_every_component_can_be_inserted` inserts every entry.
+**Its preview.** The Add tab shows the snippet itself, live, beside the
+sidebar (see [The Add tab's previews](#the-add-tabs-previews)). Look at the
+new entry's preview: most need nothing, some need one of these keys:
+
+- `demo` is QML shown instead of the snippet, for a component that shows
+  nothing on its own: an empty layout gets `Box` placeholders, a
+  `ScrollView` something to scroll. Keep it to what is added plus example
+  contents, so the preview doesn't promise more than the user gets. It uses
+  the same placeholders as `qml`.
+- `stage` says how the component is put on the stage. The default follows
+  the snippet: `"wide"` if it sets `Layout.fillWidth`, `"fill"` if it sets
+  `anchors`, else `"center"` (its own size); `"none"` with `visual=False`.
+  Say `"wide"` or `"fill"` for a component that only looks right with a
+  width or size given to it (a delegate, a list view), `"popup"` for a
+  dialog (it is opened on the stage, not modal and without focus), `"none"`
+  for a visual item that draws nothing.
+- `height` is the stage's height in grid units for `"fill"` and `"popup"`.
+- `note` is a line below the preview, for what it can't show.
+
+A widget's preview is drawn by `UiPreview.demo_image()` in `preview.py`: add
+example contents there if the new widget is empty without them.
+
+`BuildingTests.test_every_component_can_be_inserted` inserts every entry;
+`PalettePreviewTests` and `gui_add_previews.py` (which creates every preview)
+cover the previews.
 
 Follow the HIG in the defaults.
 

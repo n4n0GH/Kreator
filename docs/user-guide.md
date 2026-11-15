@@ -235,6 +235,32 @@ The **Add** tab lists components to insert:
   Qt Quick Controls, layouts and plain Qt Quick items.
 - **For forms:** Qt Widgets.
 
+**Previews:** rest the pointer on a component to see what it looks like. A
+preview opens beside the sidebar with the component itself, drawn live in
+your colour scheme and style, its full description and the module it comes
+from. It shows what will be added:
+
+- Components that show nothing on their own get example contents: a layout
+  holds numbered boxes, a `ScrollView` some lines to scroll.
+- A page is shown as in a window, with its title and an action in the
+  toolbar; a dialog is shown open.
+- What isn't drawn (a model, a timer, `Connections`) shows its icon, and a
+  note says so. A note also tells when the preview is only a sketch: a
+  `GlobalDrawer` lives at the edge of a window, which the preview doesn't
+  have.
+- For forms, the preview is a picture of the widget; layouts, containers and
+  views get example contents too.
+
+The preview is for looking: it takes neither clicks nor the keyboard, so you
+can keep typing in the search field while it is open. The *Show Previews*
+button beside the search field switches previews off and on (remembered
+between sessions); without them, a tooltip shows the description.
+
+**With the keyboard:** press Down in the search field to get into the list.
+The arrow keys go from component to component, showing each one's preview;
+Enter or Space adds the component, Escape closes the preview, and Up at the
+top of the list returns to the search field.
+
 Search with *Search components…*, then click a component to add it to the
 selected object, or drag it onto the design view to add it where you drop
 it. While you drag, the object it will be added to is outlined; when that
@@ -1029,6 +1055,8 @@ still there.
 | Place or resize freely while dragging (no snapping) | hold Shift |
 | Cancel moving or resizing an object | Escape |
 | Zoom the preview | Ctrl+wheel |
+| Go through the Add tab's components, with their previews | Down in the search field, then the arrow keys |
+| Add the component chosen in the Add tab's list | Enter or Space |
 
 In the source view, the editor's own shortcuts apply as well: Kate's (its
 actions and their shortcuts are listed in the editor's context menu) or the

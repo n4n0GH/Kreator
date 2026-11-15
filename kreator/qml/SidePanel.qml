@@ -20,6 +20,8 @@ ColumnLayout {
     // without a document: the files, or the project's qmllint findings
     readonly property int shownTab: Backend.hasDocument || currentTab === 3 ? currentTab : 0
     readonly property int lintCount: Lsp.projectErrorCount + Lsp.projectWarningCount
+    // the Add tab shows what a component looks like (remembered by the page)
+    property bool componentPreviews: true
 
     function showTab(index) {
         currentTab = index
@@ -303,14 +305,44 @@ ColumnLayout {
         ColumnLayout {
             spacing: 0
 
-            Kirigami.SearchField {
-                // no window-wide Ctrl+F: the source view uses it for find
-                focusSequences: []
-                id: paletteSearch
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.margins: Kirigami.Units.smallSpacing
-                placeholderText: qsTr("Search components…")
-                onTextChanged: Backend.setPaletteFilter(text)
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.SearchField {
+                    // no window-wide Ctrl+F: the source view uses it for find
+                    focusSequences: []
+                    id: paletteSearch
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Search components…")
+                    onTextChanged: Backend.setPaletteFilter(text)
+                    // on to the list: the arrow keys show one component after the other
+                    Keys.onDownPressed: {
+                        if (paletteView.count === 0)
+                            return
+                        paletteView.currentIndex = Math.max(0, paletteView.currentIndex)
+                        paletteView.forceActiveFocus(Qt.TabFocusReason)
+                    }
+                }
+                QQC2.ToolButton {
+                    id: previewsButton
+                    objectName: "componentPreviewsButton"
+                    icon.name: "view-preview"
+                    text: qsTr("Show Previews")
+                    display: QQC2.AbstractButton.IconOnly
+                    checkable: true
+                    onToggled: panel.componentPreviews = checked
+                    QQC2.ToolTip.text: qsTr("Show what a component looks like when the pointer is on it, or when it is chosen with the arrow keys")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                }
+                // (a Binding: clicking the button would break a plain one)
+                Binding {
+                    target: previewsButton
+                    property: "checked"
+                    value: panel.componentPreviews
+                }
             }
 
             QQC2.Label {
@@ -398,6 +430,48 @@ ColumnLayout {
                     id: paletteView
                     clip: true
                     model: Backend.palette
+                    activeFocusOnTab: true
+                    keyNavigationEnabled: true
+                    highlightMoveDuration: 0
+                    currentIndex: -1
+                    // the row the preview is for: the one the pointer is on,
+                    // or the current one when that came later (arrow keys)
+                    property Item hoveredRow: null
+                    property bool byKeyboard: false
+                    readonly property Item previewRow: byKeyboard && activeFocus ? currentItem : hoveredRow
+                    onCurrentIndexChanged: byKeyboard = activeFocus && currentIndex >= 0
+                    onActiveFocusChanged: {
+                        // a current row only while the keys are here (the
+                        // list would scroll to keep it in view when the
+                        // filter changes)
+                        if (!activeFocus)
+                            currentIndex = -1
+                        byKeyboard = activeFocus && currentIndex >= 0
+                    }
+                    onCountChanged: if (currentIndex >= count) currentIndex = count - 1
+                    // (scrolled: the preview stays level with its row)
+                    onContentYChanged: componentPreview.place()
+
+                    function addCurrent() {
+                        if (currentItem)
+                            Backend.insertComponent(currentItem.index)
+                    }
+                    Keys.onReturnPressed: addCurrent()
+                    Keys.onEnterPressed: addCurrent()
+                    Keys.onSpacePressed: addCurrent()
+                    Keys.onEscapePressed: event => {
+                        if (byKeyboard)
+                            byKeyboard = false    // closes the preview
+                        else
+                            event.accepted = false
+                    }
+                    Keys.onUpPressed: event => {
+                        if (currentIndex <= 0)
+                            paletteSearch.forceActiveFocus(Qt.BacktabFocusReason)
+                        else
+                            event.accepted = false
+                    }
+
                     section.property: "category"
                     section.delegate: Kirigami.ListSectionHeader {
                         required property string section
@@ -409,13 +483,26 @@ ColumnLayout {
                         required property string name
                         required property string iconName
                         required property string description
+                        required property string module
                         required property int index
                         width: ListView.view.width
                         text: name
+                        highlighted: ListView.isCurrentItem && paletteView.activeFocus
                         Accessible.description: description
+                        // (without the preview, which shows it in full)
                         QQC2.ToolTip.text: description
-                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.visible: hovered && !panel.componentPreviews
                         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                        onHoveredChanged: {
+                            if (hovered) {
+                                paletteView.hoveredRow = pdel
+                                paletteView.byKeyboard = false
+                            } else if (paletteView.hoveredRow === pdel) {
+                                paletteView.hoveredRow = null
+                            }
+                        }
+                        Component.onDestruction: if (paletteView.hoveredRow === pdel) paletteView.hoveredRow = null
 
                         contentItem: KD.IconTitleSubtitle {
                             title: pdel.name
@@ -458,6 +545,15 @@ ColumnLayout {
 
         // ---------------------------------------------------------- guidelines
         IssuesPanel {}
+    }
+
+    // What the component of a row looks like, beside the sidebar (not while
+    // one is dragged: the design view shows where that one goes).
+    ComponentPreview {
+        id: componentPreview
+        panel: panel
+        row: panel.componentPreviews && panel.visible && panel.shownTab === 2 && !componentDrag.Drag.active
+             ? paletteView.previewRow : null
     }
 
     // A component being dragged from the Add tab: drawn above the window and

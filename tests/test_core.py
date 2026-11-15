@@ -572,3 +572,60 @@ class SessionHistoryTest(unittest.TestCase):
         self.assertEqual(session.decode_chain(current, session.encode_chain(current, redo)), redo)
         self.assertEqual(session.decode_chain(current, []), [])
         self.assertEqual(session.decode_chain(current, [[[["bad"]], 0]]), [])  # garbage is dropped
+
+
+class PalettePreviewTests(unittest.TestCase):
+    """What the Add tab shows of a component before it is added."""
+
+    def setUp(self):
+        self.e = {e["name"]: e for e in palette.QML_COMPONENTS}
+
+    def test_snippets_stand_alone(self):
+        self.assertEqual(palette.standalone('{C}Label {\n    text: {T}("Item %1", index + 1)\n}'),
+                         'QQC2.Label {\n    text: qsTr("Item %1").arg(index + 1)\n}')
+        self.assertEqual(palette.standalone('{L}RowLayout {\n    spacing: {K}Units.smallSpacing\n}'),
+                         'RowLayout {\n    spacing: Kirigami.Units.smallSpacing\n}')
+
+    def test_stage_follows_the_snippet(self):
+        stages = {name: palette.preview_stage(self.e[name]) for name in
+                  ("Button", "InlineMessage", "PlaceholderMessage", "Dialog", "Timer", "ToolBar")}
+        self.assertEqual(stages, {"Button": "center",            # at its own size
+                                  "InlineMessage": "wide",       # fills its layout's width
+                                  "PlaceholderMessage": "fill",  # anchored to its parent
+                                  "Dialog": "popup",
+                                  "Timer": "none",               # not drawn
+                                  # (the label inside fills the width, not the bar itself: said in the entry)
+                                  "ToolBar": "wide"})
+        self.assertEqual(palette.preview_stage(dict(qml="Item {\n    Item {\n        anchors.fill: parent\n    }\n}")),
+                         "center")
+
+    def test_every_component_has_a_preview_or_a_note(self):
+        for entry in palette.QML_COMPONENTS:
+            name = entry["name"]
+            text = palette.preview_qml(entry)
+            if palette.preview_stage(entry) == "none":
+                self.assertEqual(text, "", name)
+                self.assertTrue(palette.preview_note(entry), name)
+                continue
+            for placeholder in ("{T}", "{K}", "{C}", "{L}", "{M}"):
+                self.assertNotIn(placeholder, text, name)
+            self.assertEqual(text.count("{"), text.count("}"), name)
+            self.assertTrue(text.startswith(palette.STANDALONE_IMPORTS), name)
+
+    def test_preview_shows_what_is_added(self):
+        # the snippet itself, unless it would show nothing
+        self.assertIn('QQC2.Button {\n            icon.name: "dialog-ok"\n            text: qsTr("Button")\n        }',
+                      palette.preview_qml(self.e["Button"]))
+        # an empty layout gets example contents
+        self.assertEqual(palette.preview_qml(self.e["RowLayout"]).count("        Box {"), 3)
+        # a snippet that fills its parent does so on the stage, one that doesn't is made to
+        self.assertEqual(palette.preview_qml(self.e["PlaceholderMessage"]).count("anchors."), 1 + 1)  # (+ Box's label)
+        self.assertIn("ListView {\n        anchors.fill: parent\n", palette.preview_qml(self.e["ListView"]))
+        # a dialog is opened on the stage, without taking over the window
+        dialog = palette.preview_qml(self.e["PromptDialog"])
+        for line in ("parent: stage", "modal: false", "focus: false", "visible: true"):
+            self.assertIn(f"        {line}\n", dialog)
+
+    def test_widgets_have_no_qml_preview_note(self):
+        for entry in palette.UI_COMPONENTS:
+            self.assertEqual(palette.preview_note(entry), "", entry["name"])

@@ -9,7 +9,7 @@ import re
 
 from PySide6.QtCore import (Q_ARG, QBuffer, QByteArray, QIODevice, QMetaObject, QObject, QPluginLoader, QPoint, QPointF,
                             QRect, QSize, Qt, QTimer, QUrl, Slot)
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QPalette
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickImageProvider, QQuickItem
 from PySide6.QtWidgets import QLayout, QWidget
@@ -323,6 +323,7 @@ class QmlPreview:
         self.mocks = None  # MockModules, created on first need
         self.context: QQmlContext | None = None
         self.component: QQmlComponent | None = None
+        self._demos: dict[str, QQmlComponent] = {}   # the Add tab's previews, by their text
 
     def component_size(self, snippet: str, imports: str, width: float, height: float) -> tuple[float, float]:
         """The size a palette snippet gets in a parent of the given size (for
@@ -359,6 +360,40 @@ class QmlPreview:
         finally:
             obj.deleteLater()
         return size
+
+    def demo_item(self, name: str, text: str, parent: QQuickItem):
+        """An item made from `text` (see palette.preview_qml()) as a child of
+        `parent`, for the Add tab's preview of a component; None if it can't
+        be made. The caller deletes it."""
+        comp = self._demos.get(text)
+        if comp is None:
+            self.preloader.preload_text(text)
+            comp = QQmlComponent(self.engine)
+            # (not ".kreator-preview-…": its warnings aren't the document's)
+            url = QUrl.fromLocalFile(os.path.join(os.getcwd(), f".kreator-palette-{name}.qml"))
+            comp.setData(QByteArray(text.encode("utf-8")), url)
+            self._demos[text] = comp
+        if comp.isError():
+            return None
+        ctx = QQmlContext(self.engine.rootContext())
+        ctx.setContextObject(self.shim)
+        obj = comp.beginCreate(ctx)
+        if obj is None:
+            return None
+        QQmlEngine.setObjectOwnership(obj, QQmlEngine.ObjectOwnership.CppOwnership)
+        ctx.setParent(obj)
+        if not isinstance(obj, QQuickItem):
+            comp.completeCreate()
+            obj.deleteLater()
+            return None
+        # in its place before it is complete: a dialog opens in its parent's window
+        obj.setParentItem(parent)
+        comp.completeCreate()
+        return obj
+
+    def demo_errors(self, text: str) -> str:
+        comp = self._demos.get(text)
+        return format_errors(comp.errors()) if comp is not None and comp.isError() else ""
 
     def create(self, doc: qmldoc.QmlDocument, base_path: str):
         """Return (object or None, mode, names, error text)."""
@@ -781,6 +816,34 @@ class UiImageProvider(QQuickImageProvider):
         return self.image
 
 
+def _blank(image: QImage) -> bool:
+    """Is nothing drawn in the image (all of it transparent)?"""
+    if not image.hasAlphaChannel():
+        return False
+    alpha = image.convertToFormat(QImage.Format.Format_Alpha8)
+    data, line, width = bytes(alpha.constBits()), alpha.bytesPerLine(), alpha.width()
+    # (line by line: what pads a line isn't part of the picture)
+    return not any(any(data[y * line:y * line + width]) for y in range(alpha.height()))
+
+
+class PaletteImageProvider(QQuickImageProvider):
+    """The picture the Add tab shows of a widget (image://kreatorpalette/…)."""
+
+    def __init__(self):
+        super().__init__(QQuickImageProvider.ImageType.Image)
+        self.image = QImage(1, 1, QImage.Format.Format_ARGB32)
+        self.image.fill(Qt.GlobalColor.transparent)
+
+    def requestImage(self, _id, size, _requested):  # noqa: N802
+        if size is not None:
+            try:
+                size.setWidth(self.image.width())
+                size.setHeight(self.image.height())
+            except AttributeError:
+                pass
+        return self.image
+
+
 class UiPreview:
     def __init__(self, provider: UiImageProvider):
         self.provider = provider
@@ -836,6 +899,150 @@ class UiPreview:
         if not hint.isValid() or hint.width() <= 0 or hint.height() <= 0:
             return 120, 80
         return max(hint.width(), 20), max(hint.height(), 20)
+
+    @staticmethod
+    def demo_image(spec: dict, max_width: int = 320):
+        """A picture of a palette entry's widget as the Add tab previews it
+        (QImage, width, height in logical pixels), or None for what draws nothing.
+        Layouts, containers and views get example contents."""
+        from PySide6.QtGui import QStandardItem, QStandardItemModel
+        from PySide6 import QtWidgets as W
+        from PySide6.QtUiTools import QUiLoader
+
+        cls = spec.get("type", "")
+        holder = QWidget()
+        holder.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        holder.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        def box(text):
+            """Stands in for a widget in a layout (like the QML previews' Box)."""
+            b = W.QLabel(text)
+            b.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            b.setMinimumSize(72, 32)
+            c = holder.palette().color(QPalette.ColorRole.Highlight)
+            rgb = f"{c.red()}, {c.green()}, {c.blue()}"
+            b.setStyleSheet(f"border: 1px solid rgba({rgb}, 0.6); border-radius: 4px; "
+                            f"background: rgba({rgb}, 0.15);")
+            return b
+
+        def tree_model():
+            model = QStandardItemModel(holder)
+            for i in range(1, 4):
+                item = QStandardItem(f"Item {i}")
+                item.appendRow(QStandardItem(f"Item {i}.1"))
+                model.appendRow(item)
+            model.setHorizontalHeaderLabels(["Name"])
+            return model
+
+        size = None
+        if cls == "QVBoxLayout" or cls == "QHBoxLayout":
+            lay = (W.QVBoxLayout if cls == "QVBoxLayout" else W.QHBoxLayout)(holder)
+            for i in range(1, 4):
+                lay.addWidget(box(str(i)))
+        elif cls == "QGridLayout":
+            lay = W.QGridLayout(holder)
+            for i in range(4):
+                lay.addWidget(box(str(i + 1)), i // 2, i % 2)
+        elif cls == "QFormLayout":
+            lay = W.QFormLayout(holder)
+            lay.addRow("Name:", W.QLineEdit())
+            combo = W.QComboBox()
+            combo.addItems(["English", "Deutsch"])
+            lay.addRow("Language:", combo)
+            lay.addRow("Updates:", W.QCheckBox("Check automatically"))
+        elif cls == "Spacer":
+            vertical = spec.get("orientation") == "Qt::Vertical"
+            lay = (W.QVBoxLayout if vertical else W.QHBoxLayout)(holder)
+            lay.addWidget(box("1"))
+            lay.addStretch(1)
+            lay.addWidget(box("2"))
+            size = QSize(120, 160) if vertical else QSize(280, 56)
+        else:
+            w = QUiLoader().createWidget(cls, holder)
+            if w is None or type(w) is QWidget:   # (a plain container draws nothing)
+                holder.deleteLater()
+                return None
+            for name, (kind, value) in spec.get("props", {}).items():
+                if kind == "string":
+                    w.setProperty(name, value)
+                elif kind == "number":
+                    w.setProperty(name, int(value))
+                elif kind == "bool":
+                    w.setProperty(name, value == "true")
+            if isinstance(w, W.QAbstractScrollArea):
+                # framed, as among other widgets (Breeze leaves out the frame
+                # of a view that has its window to itself)
+                w.setProperty("_breeze_force_frame", True)
+            # what the entry's enums and flags say, and example contents
+            if isinstance(w, W.QDialogButtonBox):
+                w.setStandardButtons(W.QDialogButtonBox.StandardButton.Ok | W.QDialogButtonBox.StandardButton.Cancel)
+            elif isinstance(w, W.QSlider):
+                w.setOrientation(Qt.Orientation.Horizontal)
+                w.setValue(40)
+                w.setMinimumWidth(160)
+            elif isinstance(w, W.QComboBox):
+                w.addItems(["First", "Second", "Third"])
+            elif isinstance(w, (W.QTextEdit, W.QPlainTextEdit)):
+                w.setPlainText("Text")
+                w.setFixedSize(220, 84)
+            elif isinstance(w, W.QTableWidget):
+                w.setRowCount(3)
+                w.setColumnCount(2)
+                w.setHorizontalHeaderLabels(["Name", "Value"])
+                for r in range(3):
+                    w.setItem(r, 0, W.QTableWidgetItem(f"Item {r + 1}"))
+                    w.setItem(r, 1, W.QTableWidgetItem(str((r + 1) * 10)))
+                w.setFixedSize(260, 130)
+            elif isinstance(w, W.QTreeWidget):
+                w.setHeaderLabel("Name")
+                for i in range(1, 4):
+                    W.QTreeWidgetItem(W.QTreeWidgetItem(w, [f"Item {i}"]), [f"Item {i}.1"])
+                w.expandAll()
+                w.setFixedSize(220, 130)
+            elif isinstance(w, W.QListWidget):
+                w.addItems([f"Item {i}" for i in range(1, 6)])
+                w.setFixedSize(220, 110)
+            elif isinstance(w, W.QTreeView):
+                w.setModel(tree_model())
+                w.expandAll()
+                w.setFixedSize(220, 130)
+            elif isinstance(w, W.QListView):
+                w.setModel(tree_model())
+                w.setFixedSize(220, 110)
+            elif isinstance(w, W.QTabWidget):
+                first = QWidget()
+                W.QVBoxLayout(first).addWidget(W.QLabel("Page contents"), 0, Qt.AlignmentFlag.AlignCenter)
+                w.addTab(first, "First")
+                w.addTab(QWidget(), "Second")
+                w.setFixedSize(240, 110)
+            elif isinstance(w, W.QStackedWidget):
+                for i in range(1, 4):
+                    w.addWidget(box(f"Page {i}"))
+                w.setFixedSize(160, 64)
+            elif isinstance(w, W.QGroupBox):
+                lay = W.QVBoxLayout(w)
+                lay.addWidget(W.QRadioButton("First option"))
+                lay.addWidget(W.QRadioButton("Second option"))
+            elif isinstance(w, W.QScrollArea):
+                inner = QWidget()
+                lay = W.QVBoxLayout(inner)
+                for i in range(1, 13):
+                    lay.addWidget(W.QLabel(f"Line {i}"))
+                w.setWidget(inner)
+                w.setFixedSize(200, 110)
+            elif isinstance(w, W.QProgressBar):
+                w.setMinimumWidth(160)
+            elif type(w) is W.QFrame:
+                w.setFixedSize(160, 72)
+            W.QVBoxLayout(holder).addWidget(w, 0, Qt.AlignmentFlag.AlignCenter)
+        hint = holder.sizeHint()
+        size = size or QSize(min(max(hint.width(), 40), max_width), max(hint.height(), 24))
+        holder.resize(size)
+        image = holder.grab().toImage()
+        holder.deleteLater()
+        if _blank(image):   # (a frame, in a style that draws none for it)
+            return None
+        return image, size.width(), size.height()
 
     def find(self, name: str):
         if self.widget is None or not name:
