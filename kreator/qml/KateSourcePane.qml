@@ -9,8 +9,8 @@ import org.kde.kreator.kate
 // (Ctrl+G), folding, completion of words, vi mode etc. are Kate's; its
 // settings are shared with Kate ("Configure Editor…"). With Kate's LSP client
 // plugin (installed with Kate), qmlls' completion, diagnostics, hover, go to
-// definition, find references, rename… are Kate's too; its panels (references,
-// diagnostics) are shown below the editor.
+// definition, find references, rename… are Kate's too; its panel with the
+// references found is shown below the editor when Kate asks for it.
 //
 // Same interface as SourcePane.qml: active, currentLine, pendingGoto,
 // load(), commitPending(), pendingText(), gotoPosition().
@@ -22,7 +22,11 @@ ColumnLayout {
     property bool dirty: false
     property bool loading: false
     property var pendingGoto: null      // {line, character} after opening another file
-    property bool panelsShown: false    // Kate's panels (references, diagnostics)
+    // Kate's panels, below the editor: shown when Kate has something to list
+    // there (find references), hidden with their close button or Escape.
+    // There is no button for them: diagnostics are in the Guidelines tab and
+    // the toolbar's counter, and for more there is Kate itself (Open in Kate)
+    property bool panelsShown: false
     readonly property int currentLine: editor.cursorLine + 1
 
     // edits not applied to the document yet ("" if none)
@@ -203,17 +207,6 @@ ColumnLayout {
                         pane.gotoPosition(next.line, next.character)
                 }
                 QQC2.ToolTip.text: qsTr("Diagnostics from qmlls: click for the next one. All files: Guidelines tab, qmllint")
-                QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-            }
-            QQC2.ToolButton {
-                text: qsTr("Panels")
-                icon.name: "view-split-top-bottom"
-                checkable: true
-                checked: pane.panelsShown
-                visible: toolArea.count > 0
-                onToggled: pane.panelsShown = checked
-                QQC2.ToolTip.text: qsTr("Kate's panels: references, diagnostics")
                 QQC2.ToolTip.visible: hovered
                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }

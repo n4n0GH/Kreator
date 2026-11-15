@@ -113,8 +113,8 @@ and the minimap.
   editor gets qmlls' completion, underlined diagnostics with hover, go to
   definition (Ctrl+click), find references (Ctrl+Alt+L), rename (F2), code
   actions (Alt+Return), symbol highlighting and, with Kate's setting on,
-  semantic colours, just like Kate. Kate's panels (references, its diagnostics
-  list) show up below the editor (*Panels* in the toolbar). Updates of Kate
+  semantic colours, just like Kate. The references found are listed in
+  Kate's panel, which opens below the editor for them. Updates of Kate
   reach these features on Kreator's next start.
   - Go to definition in another QML/UI file opens it in Kreator.
   - Go to definition on a type implemented in C++ (`Rectangle`, `Item`,

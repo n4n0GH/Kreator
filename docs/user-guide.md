@@ -520,8 +520,8 @@ qmlls. You get:
   You can find all of these in the editor's context menu. A rename or code
   action that changes other files changes them in Kreator as unsaved, undoable
   edits; nothing is written to disk until you save.
-- **Panels** in the toolbar shows Kate's panels below the editor: the
-  references list and Kate's diagnostics list.
+- The references found are listed in Kate's panel, which opens below the
+  editor for them. Close it with its close button or Escape.
 
 A project's `.qmlls.ini` file is respected. It tells qmlls where the build
 directory and import paths are, so modules that only exist in your

@@ -10,6 +10,8 @@
   the search field switches them off.
 - The Add tab's list can be used with the keyboard: Down from the search
   field, the arrow keys, Enter or Space to add.
+- The source view's toolbar no longer has a *Panels* button. Kate's panel
+  still opens below the editor for the results of *Find References*.
 - Fixed: previewing a file of a QML module could replace the `qmldir` in the
   module's build folder (or one next to the file) with the one Kreator
   writes for its stand-in of the module.

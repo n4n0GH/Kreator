@@ -141,6 +141,8 @@ def ref_rows():
 def s7():
     areas = find_all(lambda it: it.objectName() == "kateToolArea")
     check(len(areas) == 1 and areas[0].nativeVisible(), "Kate's panel is shown below the editor")
+    # (it comes for what Kate lists there; the toolbar has no button for it)
+    check(not find_all(lambda it: it.property("text") == "Panels"), "the toolbar has no Panels button")
     if areas:
         g = areas[0].nativeGeometry(); e = globals()["ed"].nativeGeometry()
         check(g.top() >= e.bottom(), f"below the editor (panel {g.y()}..{g.bottom()}, editor ..{e.bottom()})")
