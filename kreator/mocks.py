@@ -345,7 +345,7 @@ class MockModules:
                         if not os.path.isdir(d):
                             continue
                         for f in os.listdir(d):
-                            if not f.endswith(".qml") and os.path.isfile(os.path.join(d, f)):
+                            if not f.endswith(".qml") and f != "qmldir" and os.path.isfile(os.path.join(d, f)):
                                 self._link(os.path.join(d, f), os.path.join(target, rel_dir, f), keep=True)
         else:
             # no build output: treat the document's directory as the module
@@ -353,12 +353,18 @@ class MockModules:
                 if f.endswith(".qml") and f[:1].isupper():
                     self._link(os.path.join(src_dir, f), os.path.join(target, f))
                     entries.append(f"{f[:-4]} 1.0 {f}")
-                elif not f.endswith(".qml") and os.path.isfile(os.path.join(src_dir, f)):
+                elif not f.endswith(".qml") and f != "qmldir" and os.path.isfile(os.path.join(src_dir, f)):
                     self._link(os.path.join(src_dir, f), os.path.join(target, f), keep=True)
             origin = "."
         if not entries:
             return None
-        with open(os.path.join(target, "qmldir"), "w", encoding="utf-8") as fh:
+        # The stand-in's own qmldir. Never a link to the real one (the
+        # companion files above are links): writing it would go through the
+        # link, and replace the qmldir of the user's build.
+        own_qmldir = os.path.join(target, "qmldir")
+        if os.path.islink(own_qmldir):
+            os.remove(own_qmldir)
+        with open(own_qmldir, "w", encoding="utf-8") as fh:
             fh.write(f"module {uri}\n" + "\n".join(dict.fromkeys(entries)) + "\n")
         if origin == ".":
             desc = f"{uri} (the QML files in this folder"

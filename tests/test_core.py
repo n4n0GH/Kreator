@@ -629,3 +629,56 @@ class PalettePreviewTests(unittest.TestCase):
     def test_widgets_have_no_qml_preview_note(self):
         for entry in palette.UI_COMPONENTS:
             self.assertEqual(palette.preview_note(entry), "", entry["name"])
+
+
+class MockModuleTests(unittest.TestCase):
+    """Stand-ins for modules that only exist inside an application."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        from kreator import mocks
+        self.work = tempfile.mkdtemp(prefix="kreator-test-mocks-")
+        self.addCleanup(shutil.rmtree, self.work, True)
+        shutil.copytree(os.path.join(os.path.dirname(__file__), "gui", "fixtures", "ownmodule"),
+                        os.path.join(self.work, "ownmodule"))
+        self.modules = mocks.MockModules()
+        self.addCleanup(self.modules.cleanup)
+
+    def read(self, *path):
+        with open(os.path.join(self.work, *path), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_builds_qmldir_is_left_alone(self):
+        # the stand-in links the build folder's files, and writes a qmldir of
+        # its own: not through a link to the build's
+        built = ("ownmodule", "built", "org", "example", "notes", "qmldir")
+        before = self.read(*built)
+        desc = self.modules.build("org.example.notes", os.path.join(self.work, "ownmodule", "src", "Main.qml"), own=True)
+        self.assertIn("built module", desc)
+        self.assertEqual(self.read(*built), before)
+        own = os.path.join(self.modules.root, "org", "example", "notes", "qmldir")
+        self.assertFalse(os.path.islink(own))
+        with open(own, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("singleton Store 1.0 _stubs/Store.qml", text)
+        self.assertIn("Footnote 1.0 Footnote.qml", text)   # (a file the build doesn't know yet)
+        # the build's other files are still there to use
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(own), "notes.qmltypes")))
+
+    def test_a_qmldir_next_to_the_document_is_left_alone(self):
+        # no build output: the document's folder stands in for the module,
+        # even if it has a qmldir (of another module)
+        folder = os.path.join(self.work, "plain")
+        os.makedirs(folder)
+        for name, text in (("Thing.qml", "import QtQuick\n\nItem {\n}\n"), ("qmldir", "module some.other\n"),
+                           ("helper.js", "function f() {}\n")):
+            with open(os.path.join(folder, name), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        desc = self.modules.build("org.example.unbuilt", os.path.join(folder, "Thing.qml"))
+        self.assertIn("the QML files in this folder", desc)
+        self.assertEqual(self.read("plain", "qmldir"), "module some.other\n")
+        target = os.path.join(self.modules.root, "org", "example", "unbuilt")
+        with open(os.path.join(target, "qmldir"), encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "module org.example.unbuilt\nThing 1.0 Thing.qml\n")
+        self.assertTrue(os.path.exists(os.path.join(target, "helper.js")))

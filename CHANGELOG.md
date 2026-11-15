@@ -10,6 +10,9 @@
   the search field switches them off.
 - The Add tab's list can be used with the keyboard: Down from the search
   field, the arrow keys, Enter or Space to add.
+- Fixed: previewing a file of a QML module could replace the `qmldir` in the
+  module's build folder (or one next to the file) with the one Kreator
+  writes for its stand-in of the module.
 
 ## 0.1.0
 
